@@ -30,144 +30,164 @@ export function useGameAuth() {
 
 export function GameContextProvider({ children }) {
   const [characters, setCharacters] = useState([])
-  const [playerId, setPlayerId] = useState("")
-  const [nameInput, setNameInput] = useState("")
   const [coins, setCoins] = useState([])
-  const [coinElements, setCoinElements] = useState({})
+  const [currentName, setCurrentName] = useState("")
+  const [userId, setUserId] = useState("")
+  const [isStart, setIsStart] = useState(false)
+  const [walletAccount, setWalletAccount] = useState('')
 
   let tempCoins = {}
-  let userId
-  let playerRef
-  let players = {}
+  let currentPlayer
+  let playerId
+
+  function handleSetWalletAccount(address) {
+    setWalletAccount(address)
+    console.log(walletAccount)
+  }
 
   function placeCoin() {
-    const { x, y } = getRandomSafeSpot()
-    const coinRef = ref(database, `coins/${getKeyString(x, y)}`)
-    set(coinRef, { x, y })
-    setTimeout(() => {
-      placeCoin()
-    }, randomFromArray(COIN_TIMEOUTS))
+      const { x, y } = getRandomSafeSpot()
+      const coinRef = ref(database, `coins/${getKeyString(x, y)}`)
+      set(coinRef, { x, y })
+      setTimeout(() => {
+        placeCoin()
+      }, randomFromArray(COIN_TIMEOUTS))
+  }
+
+  function handleStopGame() {
+    setIsStart(false)
+    console.log(isStart)
+  }
+
+  function handleStartGame() {
+    setIsStart(true)
+    console.log(isStart)
   }
 
   function handleChangeName(value) {
-    const newName = value || createName()
-    playerRef = ref(database, `players/${playerId}`)
+    const newName = value
+    setCurrentName(newName)
+    const playerRef = ref(database, `players/${userId}`)
     update(playerRef, {
-      name: newName,
+      name: newName || createName(),
     })
   }
 
   function handleChangeColor() {
-    const player = characters.find((char) => char.id === playerId)
+    const player = characters.find((char) => char.id === userId)
     const mySkinIndex = PLAYER_COLORS.indexOf(player.color)
     const nextColor = PLAYER_COLORS[mySkinIndex + 1] || PLAYER_COLORS[0]
-    playerRef = ref(database, `players/${playerId}`)
+    const playerRef = ref(database, `players/${userId}`)
     if (playerRef) {
       update(playerRef, {
         color: nextColor,
       })
     }
+  }
 
-    console.log(coins)
+  function handleArrowPress(xChange = 0, yChange = 0) {
+    const playerRef = ref(database, `players/${playerId}`)
+    if (currentPlayer) {
+      const newX = currentPlayer.x + xChange
+      const newY = currentPlayer.y + yChange
+      if (!isSolid(newX, newY)) {
+        currentPlayer.x = newX
+        currentPlayer.y = newY
+        if (xChange === 1) {
+          currentPlayer.direction = "right"
+        }
+        if (xChange === -1) {
+          currentPlayer.direction = "left"
+        }
+        set(playerRef, currentPlayer)
+      }
+    }
+    attemptGrabCoin(newX, newY)
+  }
+
+  function attemptGrabCoin(x, y) {
+    const key = getKeyString(x, y)
+    if (tempCoins[key]) {
+      const coinRef = ref(database, `coins/${key}`)
+      const playerRef = ref(database, `players/${playerId}`)
+      remove(coinRef)
+      update(playerRef, {
+        coins: currentPlayer.coins + 1,
+      })
+    }
+  }
+
+  function enableMovement() {
+    new KeyPressListener("ArrowUp", () => handleArrowPress(0, -1))
+    new KeyPressListener("ArrowDown", () => handleArrowPress(0, 1))
+    new KeyPressListener("ArrowLeft", () => handleArrowPress(-1, 0))
+    new KeyPressListener("ArrowRight", () => handleArrowPress(1, 0))
+  }
+
+  function startGame() {
+    const allPlayersRef = ref(database, "players")
+    const allCoinsRef = ref(database, "coins")
+
+    onValue(allPlayersRef, (snapshot) => {
+      const players = snapshot.val() || {}
+      currentPlayer = players[playerId]
+      setCharacters(() => {
+        return Object.keys(players).map((key) => players[key])
+      })
+    })
+
+    onChildAdded(allPlayersRef, (snapshot) => {
+      const addedPlayer = snapshot.val()
+
+      if (addedPlayer.id === playerId) {
+        currentPlayer = addedPlayer
+        setCurrentName(addedPlayer.name)
+      }
+      setCharacters((prev) => {
+        return [...prev, addedPlayer]
+      })
+    })
+
+    onChildAdded(allCoinsRef, (snapshot) => {
+      const newCoin = snapshot.val()
+      const key = getKeyString(newCoin.x, newCoin.y)
+      setCoins((prev) => {
+        return [...prev, { ...newCoin, key }]
+      })
+    })
+
+    onValue(allCoinsRef, (snapshot) => {
+      const xCoins = snapshot.val()
+      if (xCoins) {
+        tempCoins = xCoins
+        setCoins(() => {
+          return Object.keys(xCoins).map((key) => {
+            return { ...coins[key], key }
+          })
+        })
+      } else {
+        setCoins([])
+      }
+    })
+
+    enableMovement()
+    // placeCoin()
   }
 
   useEffect(() => {
-    function attemptGrabCoin(x, y) {
-      const key = getKeyString(x, y)
-      if (tempCoins[key]) {
-        const coinRef = ref(database, `coins/${key}`)
-        remove(coinRef)
-        update(playerRef, {
-          coins: players[userId].coins + 1,
-        })
-      }
-    }
-
-    function handleArrowPress(xChange = 0, yChange = 0) {
-      const newX = players[userId].x + xChange
-      const newY = players[userId].y + yChange
-      if (!isSolid(newX, newY)) {
-        players[userId].x = newX
-        players[userId].y = newY
-        if (xChange === 1) {
-          players[userId].direction = "right"
-        }
-        if (xChange === -1) {
-          players[userId].direction = "left"
-        }
-        set(playerRef, players[userId])
-      }
-
-      attemptGrabCoin(newX, newY)
-    }
-
-    function initGame() {
-      const allPlayersRef = ref(database, "players")
-      const allCoinsRef = ref(database, "coins")
-
-      onValue(allPlayersRef, (snapshot) => {
-        players = snapshot.val() || {}
-        setCharacters(() => {
-          return Object.keys(players).map((key) => players[key])
-        })
-      })
-
-      onChildAdded(allPlayersRef, (snapshot) => {
-        const addedPlayer = snapshot.val()
-        if (addedPlayer) {
-          setCharacters((prev) => {
-            return [...prev, addedPlayer]
-          })
-        }
-      })
-
-      onChildAdded(allCoinsRef, (snapshot) => {
-        const newCoin = snapshot.val()
-        const key = getKeyString(newCoin.x, newCoin.y)
-        setCoins((prev) => {
-          return [...prev, { ...newCoin, key }]
-        })
-      })
-
-      onValue(allCoinsRef, (snapshot) => {
-        const coins = snapshot.val()
-        if (coins) {
-            tempCoins = coins
-            setCoins(() => {
-                return Object.keys(coins).map((key) => {
-                  return { ...coins[key], key }
-                })
-              })
-        } else {
-            setCoins([])
-        }
-        
-      })
-
-    //   placeCoin()
-    }
+    signInAnonymously(auth).catch((error) => {
+      const errorMessage = error.message
+      console.log(errorMessage)
+    })
 
     onAuthStateChanged(auth, (user) => {
-      if (user) {
+      if (user.uid) {
+        playerId = user.uid
         const { x, y } = getRandomSafeSpot()
-
-        userId = user.uid
-        playerRef = ref(database, `players/${userId}`)
-        onValue(playerRef, (snapshot) => {
-          const player = snapshot.val()
-          if (player) {
-            setCharacters((prev) => {
-              return [
-                ...prev,
-                {
-                  ...player[userId],
-                },
-              ]
-            })
-          }
-        })
+        setUserId(user.uid)
+        const playerRef = ref(database, `players/${user.uid}`)
         set(playerRef, {
-          id: userId,
+          id: playerId,
           name: createName(),
           direction: "right",
           color: randomFromArray(PLAYER_COLORS),
@@ -175,32 +195,23 @@ export function GameContextProvider({ children }) {
           y,
           coins: 0,
         })
-        setPlayerId(user.uid)
-
+        startGame()
         onDisconnect(playerRef).remove()
       }
     })
-
-    signInAnonymously(auth).catch((error) => {
-      const errorMessage = error.message
-      console.log(errorMessage)
-    })
-
-    initGame()
-
-    new KeyPressListener("ArrowUp", () => handleArrowPress(0, -1))
-    new KeyPressListener("ArrowDown", () => handleArrowPress(0, 1))
-    new KeyPressListener("ArrowLeft", () => handleArrowPress(-1, 0))
-    new KeyPressListener("ArrowRight", () => handleArrowPress(1, 0))
   }, [])
+
 
   const value = {
     characters,
-    userId,
     handleChangeName,
     handleChangeColor,
     coins,
-    playerId
+    userId,
+    currentName,
+    handleStartGame,
+    handleStopGame,
+    handleSetWalletAccount
   }
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>
