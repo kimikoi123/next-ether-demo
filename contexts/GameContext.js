@@ -34,7 +34,7 @@ export function GameContextProvider({ children }) {
   const [currentName, setCurrentName] = useState("")
   const [userId, setUserId] = useState("")
   const [isStart, setIsStart] = useState(false)
-  const [walletAccount, setWalletAccount] = useState('')
+  const [walletAccount, setWalletAccount] = useState("")
 
   let tempCoins = {}
   let currentPlayer
@@ -43,15 +43,6 @@ export function GameContextProvider({ children }) {
   function handleSetWalletAccount(address) {
     setWalletAccount(address)
     console.log(walletAccount)
-  }
-
-  function placeCoin() {
-      const { x, y } = getRandomSafeSpot()
-      const coinRef = ref(database, `coins/${getKeyString(x, y)}`)
-      set(coinRef, { x, y })
-      setTimeout(() => {
-        placeCoin()
-      }, randomFromArray(COIN_TIMEOUTS))
   }
 
   function handleStopGame() {
@@ -124,7 +115,7 @@ export function GameContextProvider({ children }) {
     new KeyPressListener("ArrowRight", () => handleArrowPress(1, 0))
   }
 
-  function startGame() {
+  function initGame() {
     const allPlayersRef = ref(database, "players")
     const allCoinsRef = ref(database, "coins")
 
@@ -174,7 +165,16 @@ export function GameContextProvider({ children }) {
     // placeCoin()
   }
 
-  useEffect(() => {
+  function placeCoin() {
+    const { x, y } = getRandomSafeSpot()
+    const coinRef = ref(database, `coins/${getKeyString(x, y)}`)
+    set(coinRef, { x, y })
+    setTimeout(() => {
+      placeCoin()
+    }, randomFromArray(COIN_TIMEOUTS))
+  }
+
+  function startGame() {
     signInAnonymously(auth).catch((error) => {
       const errorMessage = error.message
       console.log(errorMessage)
@@ -191,16 +191,23 @@ export function GameContextProvider({ children }) {
           name: createName(),
           direction: "right",
           color: randomFromArray(PLAYER_COLORS),
+          walletAddress: walletAccount,
           x,
           y,
           coins: 0,
         })
-        startGame()
+        initGame()
         onDisconnect(playerRef).remove()
       }
     })
-  }, [])
+  }
 
+  useEffect(() => {
+    if (walletAccount !== "") {
+      startGame()
+      placeCoin()
+    }
+  }, [walletAccount])
 
   const value = {
     characters,
@@ -211,7 +218,7 @@ export function GameContextProvider({ children }) {
     currentName,
     handleStartGame,
     handleStopGame,
-    handleSetWalletAccount
+    handleSetWalletAccount,
   }
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>

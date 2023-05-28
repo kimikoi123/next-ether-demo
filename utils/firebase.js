@@ -5,13 +5,13 @@ import { getDatabase } from 'firebase/database';
 
 
 const firebaseConfig = {
-    apiKey: "AIzaSyBK6GXDAs9N7iWV8z9EE47tsP603kUu_3c",
-    authDomain: "multiplayer-demo-3483c.firebaseapp.com",
-    databaseURL: "https://multiplayer-demo-3483c-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "multiplayer-demo-3483c",
-    storageBucket: "multiplayer-demo-3483c.appspot.com",
-    messagingSenderId: "1070035467092",
-    appId: "1:1070035467092:web:1c6c6c297e2429c38b26c1"
+    apiKey: process.env.NEXT_PUBLIC_API_KEY,
+    authDomain: process.env.NEXT_PUBLIC_AUTH_DOMAIN,
+    databaseURL: process.env.NEXT_PUBLIC_DATABASE_URL,
+    projectId: process.env.NEXT_PUBLIC_PROJECT_ID,
+    storageBucket: process.env.NEXT_PUBLIC_STORAGE_BUCKET,
+    messagingSenderId: process.env.NEXT_PUBLIC_MESSAGING_SENDER_ID,
+    appId: process.env.NEXT_PUBLIC_APP_ID
   };
 
 const app = initializeApp(firebaseConfig);
